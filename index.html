@@ -1,0 +1,1121 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Laporan Harian</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js -->
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+  </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen" x-data="app()" x-cloak>
+  <!-- Notifikasi Toast -->
+  <div x-show="notification.show" 
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 transform translate-y-2"
+       x-transition:enter-end="opacity-100 transform translate-y-0"
+       x-transition:leave="transition ease-in duration-300"
+       x-transition:leave-start="opacity-100 transform translate-y-0"
+       x-transition:leave-end="opacity-0 transform translate-y-2"
+       @click="notification.show = false"
+       class="fixed bottom-4 right-4 bg-white shadow-lg rounded-lg p-4 w-80 border-l-4 cursor-pointer z-50"
+       :class="{
+         'border-green-500': notification.type === 'success',
+         'border-red-500': notification.type === 'error',
+         'border-blue-500': notification.type === 'info'
+       }">
+    <div class="flex items-center">
+      <div class="flex-shrink-0">
+        <template x-if="notification.type === 'success'">
+          <svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </template>
+        <template x-if="notification.type === 'error'">
+          <svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </template>
+        <template x-if="notification.type === 'info'">
+          <svg class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </template>
+      </div>
+      <div class="ml-3">
+        <p class="text-sm font-medium text-gray-900" x-text="notification.message"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Halaman Login -->
+  <div x-show="!loggedIn" class="min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+      <h1 class="text-2xl font-bold text-center mb-6">Sistem Laporan Harian</h1>
+
+      <div class="mb-6">
+        <div class="flex space-x-4 mb-4">
+          <button @click="selectedRole = 'employee'" 
+                  :class="selectedRole === 'employee' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'" 
+                  class="flex-1 py-2 rounded font-medium transition-colors">
+            Karyawan
+          </button>
+          <button @click="selectedRole = 'admin'" 
+                  :class="selectedRole === 'admin' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'" 
+                  class="flex-1 py-2 rounded font-medium transition-colors">
+            Admin
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <input type="text" x-model="loginForm.username" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input type="password" x-model="loginForm.password" @keyup.enter="login" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+      </div>
+
+      <button @click="login" 
+              class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors"
+              :disabled="loginLoading"
+              :class="{ 'opacity-70 cursor-not-allowed': loginLoading }">
+        <template x-if="loginLoading">
+          <div class="flex justify-center items-center">
+            <svg class="animate-spin h-5 w-5 mr-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Memproses...</span>
+          </div>
+        </template>
+        <template x-if="!loginLoading">
+          <span>Masuk</span>
+        </template>
+      </button>
+
+      <div x-show="loginError" class="mt-4 text-red-500 text-sm text-center" x-text="loginError"></div>
+
+      <div class="mt-6 text-center text-sm text-gray-500">
+        <p>Default: admin/admin123 atau karyawan/karyawan123</p>
+        <p class="mt-2">
+          <a href="#" @click.prevent="initializeDatabase" class="text-blue-500 hover:underline">
+            Inisialisasi Database
+          </a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aplikasi Utama -->
+  <div x-show="loggedIn" class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow">
+      <div class="container mx-auto px-4 py-4 flex items-center justify-between">
+        <h1 class="text-xl font-bold text-gray-800">Sistem Laporan Harian</h1>
+        <div class="flex items-center space-x-4">
+          <div>
+            <p class="text-sm text-gray-600" x-text="'Masuk sebagai: ' + currentUser.name"></p>
+            <p class="text-xs text-gray-500" x-text="'Departemen: ' + currentUser.department"></p>
+          </div>
+          <button @click="logout" class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm">
+            Keluar
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8 flex-1">
+      <!-- Tab Menu -->
+      <div class="mb-8 flex border-b">
+        <button @click="currentTab = 'dashboard'" 
+                :class="{'text-blue-500 border-b-2 border-blue-500': currentTab === 'dashboard'}"
+                class="px-4 py-2 font-medium">
+          Dashboard
+        </button>
+        <template x-if="currentUser.role === 'employee'">
+          <button @click="currentTab = 'submit-report'" 
+                  :class="{'text-blue-500 border-b-2 border-blue-500': currentTab === 'submit-report'}"
+                  class="px-4 py-2 font-medium">
+            Kirim Laporan Baru
+          </button>
+        </template>
+        <button @click="currentTab = 'view-reports'; fetchReports()" 
+                :class="{'text-blue-500 border-b-2 border-blue-500': currentTab === 'view-reports'}"
+                class="px-4 py-2 font-medium">
+          Lihat Laporan
+        </button>
+        <template x-if="currentUser.role === 'admin'">
+          <button @click="currentTab = 'manage-employees'; fetchEmployees()" 
+                  :class="{'text-blue-500 border-b-2 border-blue-500': currentTab === 'manage-employees'}"
+                  class="px-4 py-2 font-medium">
+            Kelola Karyawan
+          </button>
+        </template>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div x-show="currentTab === 'dashboard'">
+        <h2 class="text-xl font-bold mb-6">Dashboard</h2>
+
+        <!-- Statistik -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-1">Total Laporan</h3>
+            <p class="text-2xl font-bold text-gray-800" x-text="dashboardStats.totalReports"></p>
+          </div>
+          
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-1">Menunggu Persetujuan</h3>
+            <p class="text-2xl font-bold text-yellow-500" x-text="dashboardStats.pendingReports"></p>
+          </div>
+          
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-1">Disetujui</h3>
+            <p class="text-2xl font-bold text-green-500" x-text="dashboardStats.approvedReports"></p>
+          </div>
+          
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-1">Ditolak</h3>
+            <p class="text-2xl font-bold text-red-500" x-text="dashboardStats.rejectedReports"></p>
+          </div>
+        </div>
+
+        <!-- Grafik Weekly Submissions -->
+        <div class="bg-white rounded-lg shadow p-6">
+          <h3 class="text-lg font-medium mb-4">Aktivitas Mingguan</h3>
+          <div>
+            <canvas id="weeklySubmissionsChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Report Tab -->
+      <div x-show="currentTab === 'submit-report' && currentUser.role === 'employee'">
+        <h2 class="text-xl font-bold mb-6">Kirim Laporan Baru</h2>
+
+        <div class="bg-white rounded-lg shadow p-6">
+          <div class="space-y-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+              <input type="date" x-model="reportForm.date" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Judul Laporan</label>
+              <input type="text" x-model="reportForm.title" placeholder="Masukkan judul ringkas" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tugas yang Selesai</label>
+              <textarea x-model="reportForm.tasksCompleted" rows="3" placeholder="Jelaskan tugas-tugas yang sudah Anda selesaikan" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Kemajuan</label>
+              <textarea x-model="reportForm.progress" rows="3" placeholder="Uraikan kemajuan yang telah dicapai pada proyek" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tantangan yang Dihadapi</label>
+              <textarea x-model="reportForm.challenges" rows="3" placeholder="Jelaskan tantangan atau hambatan yang Anda hadapi" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Rencana untuk Besok</label>
+              <textarea x-model="reportForm.nextDayPlan" rows="3" placeholder="Uraikan rencana untuk hari kerja berikutnya" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Catatan Tambahan (Opsional)</label>
+              <textarea x-model="reportForm.additionalNotes" rows="2" placeholder="Tambahkan catatan lain jika perlu" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+
+            <div class="flex justify-end">
+              <button @click="submitReportForm" 
+                      class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors"
+                      :disabled="reportSubmitting"
+                      :class="{ 'opacity-70 cursor-not-allowed': reportSubmitting }">
+                <template x-if="reportSubmitting">
+                  <div class="flex items-center">
+                    <svg class="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Mengirim...</span>
+                  </div>
+                </template>
+                <template x-if="!reportSubmitting">
+                  <span>Kirim Laporan</span>
+                </template>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View Reports Tab -->
+      <div x-show="currentTab === 'view-reports'">
+        <h2 class="text-xl font-bold mb-6">Daftar Laporan</h2>
+
+        <!-- Kontrol Filter -->
+        <template x-if="currentUser.role === 'admin'">
+          <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex flex-wrap items-center gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Filter Status</label>
+                <select x-model="reportFilters.status" class="px-4 py-2 border rounded">
+                  <option value="">Semua Status</option>
+                  <option value="Menunggu">Menunggu</option>
+                  <option value="Disetujui">Disetujui</option>
+                  <option value="Ditolak">Ditolak</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cari Berdasarkan Username</label>
+                <input type="text" x-model="reportFilters.username" placeholder="Masukkan username" class="px-4 py-2 border rounded" />
+              </div>
+              
+              <div class="mt-4 md:mt-0">
+                <button @click="applyReportFilters" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors">
+                  Terapkan Filter
+                </button>
+                <button @click="clearReportFilters" class="ml-2 px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 transition-colors">
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Tabel Laporan -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <template x-if="reports.length === 0">
+            <div class="p-8 text-center">
+              <p class="text-gray-500">Tidak ada laporan yang ditemukan</p>
+              <template x-if="currentUser.role === 'employee'">
+                <button @click="currentTab = 'submit-report'" class="mt-2 text-blue-500 hover:underline">
+                  Buat Laporan Baru
+                </button>
+              </template>
+            </div>
+          </template>
+          
+          <template x-if="reports.length > 0">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul</th>
+                    <template x-if="currentUser.role === 'admin'">
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                    </template>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="report in reports" :key="report.reportId">
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap" x-text="formatDate(report.date)"></td>
+                      <td class="px-6 py-4" x-text="report.title"></td>
+                      <template x-if="currentUser.role === 'admin'">
+                        <td class="px-6 py-4 whitespace-nowrap" x-text="report.username"></td>
+                      </template>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                              :class="{
+                                'bg-yellow-100 text-yellow-800': report.status === 'Menunggu',
+                                'bg-green-100 text-green-800': report.status === 'Disetujui',
+                                'bg-red-100 text-red-800': report.status === 'Ditolak'
+                              }"
+                              x-text="report.status">
+                        </span>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <button @click="viewReportDetails(report)" class="text-blue-500 hover:underline">
+                          Lihat Detail
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Manage Employees Tab -->
+      <div x-show="currentTab === 'manage-employees' && currentUser.role === 'admin'">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold">Kelola Karyawan</h2>
+          <button @click="showAddEmployeeModal = true" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+            + Tambah Karyawan Baru
+          </button>
+        </div>
+
+        <!-- Tabel Karyawan -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <template x-if="employees.length === 0">
+            <div class="p-8 text-center text-gray-500">
+              Tidak ada data karyawan yang ditemukan
+            </div>
+          </template>
+          
+          <template x-if="employees.length > 0">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departemen</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="employee in employees" :key="employee.username">
+                    <tr>
+                      <td class="px-6 py-4 whitespace-nowrap" x-text="employee.username"></td>
+                      <td class="px-6 py-4 whitespace-nowrap" x-text="employee.name"></td>
+                      <td class="px-6 py-4 whitespace-nowrap" x-text="employee.department"></td>
+                      <td class="px-6 py-4 whitespace-nowrap" x-text="employee.email"></td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                              :class="employee.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                              x-text="employee.isActive ? 'Aktif' : 'Nonaktif'">
+                        </span>
+                      </td>
+                      <td class="px-6 py-4 whitespace-nowrap">
+                        <button @click="toggleEmployeeStatus(employee)" 
+                                class="text-sm hover:underline"
+                                :class="employee.isActive ? 'text-red-500' : 'text-green-500'"
+                                x-text="employee.isActive ? 'Nonaktifkan' : 'Aktifkan'">
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Tambah Karyawan -->
+    <div x-show="showAddEmployeeModal" 
+         class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50"
+         @click.self="showAddEmployeeModal = false"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden" @click.away="showAddEmployeeModal = false">
+        <div class="px-6 py-4 bg-gray-50 border-b">
+          <h3 class="text-lg font-medium">Tambah Karyawan Baru</h3>
+        </div>
+        
+        <div class="p-6">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input type="text" x-model="newEmployeeForm.username" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input type="password" x-model="newEmployeeForm.password" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+              <input type="text" x-model="newEmployeeForm.name" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Departemen</label>
+              <input type="text" x-model="newEmployeeForm.department" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input type="email" x-model="newEmployeeForm.email" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+          
+          <div class="mt-6 flex justify-end space-x-3">
+            <button @click="showAddEmployeeModal = false" class="px-4 py-2 border rounded text-gray-600 hover:bg-gray-100 transition-colors">
+              Batal
+            </button>
+            <button @click="addEmployeeSubmit" 
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                    :disabled="employeeSubmitting"
+                    :class="{ 'opacity-70 cursor-not-allowed': employeeSubmitting }">
+              <template x-if="employeeSubmitting">
+                <div class="flex items-center">
+                  <svg class="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Menyimpan...</span>
+                </div>
+              </template>
+              <template x-if="!employeeSubmitting">
+                <span>Simpan</span>
+              </template>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Detail Laporan -->
+    <div x-show="showReportModal" 
+         class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50"
+         @click.self="showReportModal = false"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden" @click.away="showReportModal = false">
+        <div class="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
+          <h3 class="text-lg font-medium" x-text="selectedReport ? selectedReport.title : 'Detail Laporan'"></h3>
+          <button @click="showReportModal = false" class="text-gray-400 hover:text-gray-500">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto max-h-[calc(90vh-112px)]" x-show="selectedReport">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mb-6">
+            <div>
+              <p class="text-sm text-gray-500">Tanggal</p>
+              <p class="font-medium" x-text="formatDate(selectedReport?.date)"></p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">Status</p>
+              <p>
+                <span class="px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full" 
+                      :class="{
+                        'bg-yellow-100 text-yellow-800': selectedReport?.status === 'Menunggu',
+                        'bg-green-100 text-green-800': selectedReport?.status === 'Disetujui',
+                        'bg-red-100 text-red-800': selectedReport?.status === 'Ditolak'
+                      }"
+                      x-text="selectedReport?.status">
+                </span>
+              </p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">Username</p>
+              <p class="font-medium" x-text="selectedReport?.username"></p>
+            </div>
+          </div>
+
+          <div class="space-y-6">
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-1">Tugas yang Selesai</h4>
+              <p class="whitespace-pre-line" x-text="selectedReport?.tasksCompleted"></p>
+            </div>
+
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-1">Kemajuan</h4>
+              <p class="whitespace-pre-line" x-text="selectedReport?.progress"></p>
+            </div>
+
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-1">Tantangan yang Dihadapi</h4>
+              <p class="whitespace-pre-line" x-text="selectedReport?.challenges"></p>
+            </div>
+
+            <div>
+              <h4 class="text-sm font-medium text-gray-500 mb-1">Rencana untuk Besok</h4>
+              <p class="whitespace-pre-line" x-text="selectedReport?.nextDayPlan"></p>
+            </div>
+
+            <template x-if="selectedReport?.additionalNotes">
+              <div>
+                <h4 class="text-sm font-medium text-gray-500 mb-1">Catatan Tambahan</h4>
+                <p class="whitespace-pre-line" x-text="selectedReport?.additionalNotes"></p>
+              </div>
+            </template>
+          </div>
+
+          <template x-if="currentUser.role === 'admin'">
+            <div class="mt-8 pt-6 border-t">
+              <h4 class="font-medium mb-3">Tindakan Admin</h4>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Ubah Status</label>
+                  <div class="flex space-x-2">
+                    <button @click="updateStatus('Menunggu')" 
+                            class="px-3 py-1 border rounded text-sm"
+                            :class="{'bg-yellow-100 border-yellow-300': selectedReport?.status === 'Menunggu'}">
+                      Menunggu
+                    </button>
+                    <button @click="updateStatus('Disetujui')" 
+                            class="px-3 py-1 border rounded text-sm"
+                            :class="{'bg-green-100 border-green-300': selectedReport?.status === 'Disetujui'}">
+                      Disetujui
+                    </button>
+                    <button @click="updateStatus('Ditolak')" 
+                            class="px-3 py-1 border rounded text-sm"
+                            :class="{'bg-red-100 border-red-300': selectedReport?.status === 'Ditolak'}">
+                      Ditolak
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Komentar Admin</label>
+                  <textarea x-model="adminComments" rows="3" placeholder="Berikan komentar atau umpan balik" class="w-full px-4 py-2 border rounded"></textarea>
+                </div>
+
+                <div class="flex justify-end">
+                  <button @click="saveReportStatus" 
+                          class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                          :disabled="reportStatusSubmitting"
+                          :class="{ 'opacity-70 cursor-not-allowed': reportStatusSubmitting }">
+                    <template x-if="reportStatusSubmitting">
+                      <div class="flex items-center">
+                        <svg class="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Menyimpan...</span>
+                      </div>
+                    </template>
+                    <template x-if="!reportStatusSubmitting">
+                      <span>Simpan Perubahan</span>
+                    </template>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function app() {
+      return {
+        // State aplikasi
+        loggedIn: false,
+        currentUser: null,
+        selectedRole: 'employee',
+        currentTab: 'dashboard',
+        loginLoading: false,
+        loginError: null,
+        
+        // Laporan
+        reports: [],
+        showReportModal: false,
+        selectedReport: null,
+        reportFilters: {
+          status: '',
+          username: ''
+        },
+        
+        // Karyawan
+        employees: [],
+        showAddEmployeeModal: false,
+        
+        // Formulir login
+        loginForm: {
+          username: '',
+          password: ''
+        },
+        
+        // Formulir laporan
+        reportForm: {
+          date: new Date().toISOString().split('T')[0],
+          title: '',
+          tasksCompleted: '',
+          progress: '',
+          challenges: '',
+          nextDayPlan: '',
+          additionalNotes: ''
+        },
+        reportSubmitting: false,
+        
+        // Karyawan baru
+        newEmployeeForm: {
+          username: '',
+          password: '',
+          name: '',
+          department: '',
+          email: ''
+        },
+        employeeSubmitting: false,
+        
+        // Status laporan
+        adminComments: '',
+        reportStatusSubmitting: false,
+        
+        // Dashboard stats
+        dashboardStats: {
+          totalReports: 0,
+          pendingReports: 0,
+          approvedReports: 0,
+          rejectedReports: 0,
+          weeklySubmissions: [0, 0, 0, 0, 0, 0, 0]
+        },
+        
+        // Notifikasi
+        notification: {
+          show: false,
+          type: 'info',
+          message: '',
+          timeout: null
+        },
+        
+        // Init
+        init() {
+          // Cek sesi login dari localStorage
+          const savedUser = localStorage.getItem('currentUser');
+          if (savedUser) {
+            try {
+              this.currentUser = JSON.parse(savedUser);
+              this.loggedIn = true;
+              this.loadDashboardStats();
+            } catch (e) {
+              console.error("Error loading saved session", e);
+              localStorage.removeItem('currentUser');
+            }
+          }
+        },
+        
+        // Login
+        login() {
+          if (!this.loginForm.username || !this.loginForm.password) {
+            this.showNotification('error', 'Username dan password harus diisi');
+            return;
+          }
+          
+          this.loginLoading = true;
+          this.loginError = null;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              this.loginLoading = false;
+              
+              if (result.success) {
+                this.currentUser = result.userData;
+                this.loggedIn = true;
+                localStorage.setItem('currentUser', JSON.stringify(result.userData));
+                this.loadDashboardStats();
+                
+                this.showNotification('success', 'Login berhasil! Selamat datang, ' + result.userData.name);
+              } else {
+                this.loginError = result.error;
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.loginLoading = false;
+              this.loginError = "Kesalahan server: " + error.toString();
+              this.showNotification('error', "Kesalahan server: " + error.toString());
+            })
+            .validateLogin(this.loginForm.username, this.loginForm.password, this.selectedRole);
+        },
+        
+        // Logout
+        logout() {
+          localStorage.removeItem('currentUser');
+          this.currentUser = null;
+          this.loggedIn = false;
+          this.resetForms();
+        },
+        
+        // Reset Forms
+        resetForms() {
+          this.loginForm = {
+            username: '',
+            password: ''
+          };
+          
+          this.reportForm = {
+            date: new Date().toISOString().split('T')[0],
+            title: '',
+            tasksCompleted: '',
+            progress: '',
+            challenges: '',
+            nextDayPlan: '',
+            additionalNotes: ''
+          };
+          
+          this.newEmployeeForm = {
+            username: '',
+            password: '',
+            name: '',
+            department: '',
+            email: ''
+          };
+          
+          this.adminComments = '';
+        },
+        
+        // Submit Report
+        submitReportForm() {
+          // Validasi
+          if (!this.reportForm.date || !this.reportForm.title || !this.reportForm.tasksCompleted) {
+            this.showNotification('error', 'Tanggal, judul, dan tugas selesai wajib diisi');
+            return;
+          }
+          
+          this.reportSubmitting = true;
+          
+          const reportData = {
+            ...this.reportForm,
+            username: this.currentUser.username
+          };
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              this.reportSubmitting = false;
+              
+              if (result.success) {
+                this.resetReportForm();
+                this.showNotification('success', result.message);
+                this.currentTab = 'view-reports';
+                this.fetchReports();
+                this.loadDashboardStats();
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.reportSubmitting = false;
+              this.showNotification('error', "Kesalahan server: " + error.toString());
+            })
+            .submitReport(reportData);
+        },
+        
+        // Reset Report Form
+        resetReportForm() {
+          this.reportForm = {
+            date: new Date().toISOString().split('T')[0],
+            title: '',
+            tasksCompleted: '',
+            progress: '',
+            challenges: '',
+            nextDayPlan: '',
+            additionalNotes: ''
+          };
+        },
+        
+        // Fetch Reports
+        fetchReports() {
+          if (this.currentUser.role === 'admin') {
+            google.script.run
+              .withSuccessHandler((result) => {
+                if (result.success) {
+                  this.reports = result.reports;
+                  this.applyReportFilters();
+                } else {
+                  this.showNotification('error', result.error);
+                }
+              })
+              .withFailureHandler((error) => {
+                this.showNotification('error', "Kesalahan mengambil laporan: " + error.toString());
+              })
+              .getAllReports();
+          } else {
+            google.script.run
+              .withSuccessHandler((result) => {
+                if (result.success) {
+                  this.reports = result.reports;
+                } else {
+                  this.showNotification('error', result.error);
+                }
+              })
+              .withFailureHandler((error) => {
+                this.showNotification('error', "Kesalahan mengambil laporan: " + error.toString());
+              })
+              .getUserReports(this.currentUser.username);
+          }
+        },
+        
+        // View Report Details
+        viewReportDetails(report) {
+          this.selectedReport = report;
+          this.adminComments = report.adminComments || '';
+          this.showReportModal = true;
+        },
+        
+        // Apply Report Filters
+        applyReportFilters() {
+          if (this.currentUser.role !== 'admin') return;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result.success) {
+                let filteredReports = result.reports;
+                
+                // Filter by status
+                if (this.reportFilters.status) {
+                  filteredReports = filteredReports.filter(report => 
+                    report.status === this.reportFilters.status
+                  );
+                }
+                
+                // Filter by username
+                if (this.reportFilters.username) {
+                  filteredReports = filteredReports.filter(report => 
+                    report.username.toLowerCase().includes(this.reportFilters.username.toLowerCase())
+                  );
+                }
+                
+                this.reports = filteredReports;
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.showNotification('error', "Kesalahan memfilter laporan: " + error.toString());
+            })
+            .getAllReports();
+        },
+        
+        // Clear Report Filters
+        clearReportFilters() {
+          this.reportFilters = {
+            status: '',
+            username: ''
+          };
+          this.fetchReports();
+        },
+        
+        // Fetch Employees
+        fetchEmployees() {
+          if (this.currentUser.role !== 'admin') return;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result.success) {
+                this.employees = result.employees;
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.showNotification('error', "Kesalahan mengambil data karyawan: " + error.toString());
+            })
+            .getAllEmployees();
+        },
+        
+        // Add Employee
+        addEmployeeSubmit() {
+          // Validasi
+          if (!this.newEmployeeForm.username || 
+              !this.newEmployeeForm.password || 
+              !this.newEmployeeForm.name || 
+              !this.newEmployeeForm.department) {
+            this.showNotification('error', 'Semua bidang kecuali email wajib diisi');
+            return;
+          }
+          
+          this.employeeSubmitting = true;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              this.employeeSubmitting = false;
+              
+              if (result.success) {
+                this.showAddEmployeeModal = false;
+                this.newEmployeeForm = {
+                  username: '',
+                  password: '',
+                  name: '',
+                  department: '',
+                  email: ''
+                };
+                this.fetchEmployees();
+                this.showNotification('success', result.message);
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.employeeSubmitting = false;
+              this.showNotification('error', "Kesalahan menambahkan karyawan: " + error.toString());
+            })
+            .addEmployee(this.newEmployeeForm);
+        },
+        
+        // Toggle Employee Status
+        toggleEmployeeStatus(employee) {
+          const newStatus = !employee.isActive;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result.success) {
+                this.fetchEmployees();
+                this.showNotification('success', result.message);
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.showNotification('error', "Kesalahan mengubah status karyawan: " + error.toString());
+            })
+            .updateEmployeeStatus(employee.username, newStatus);
+        },
+        
+        // Update Report Status
+        updateStatus(status) {
+          if (this.selectedReport) {
+            this.selectedReport.status = status;
+          }
+        },
+        
+        // Save Report Status
+        saveReportStatus() {
+          if (!this.selectedReport) return;
+          
+          this.reportStatusSubmitting = true;
+          
+          google.script.run
+            .withSuccessHandler((result) => {
+              this.reportStatusSubmitting = false;
+              
+              if (result.success) {
+                this.showReportModal = false;
+                this.fetchReports();
+                this.showNotification('success', result.message);
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.reportStatusSubmitting = false;
+              this.showNotification('error', "Kesalahan menyimpan status: " + error.toString());
+            })
+            .updateReportStatus(
+              this.selectedReport.reportId,
+              this.selectedReport.status,
+              this.adminComments
+            );
+        },
+        
+        // Dashboard Stats
+        loadDashboardStats() {
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result.success) {
+                this.dashboardStats = result.stats;
+                this.initWeeklyChart();
+              }
+            })
+            .withFailureHandler((error) => {
+              console.error("Error loading dashboard stats", error);
+            })
+            .getDashboardStats(this.currentUser.username, this.currentUser.role);
+        },
+        
+        // Initialize Weekly Chart
+        initWeeklyChart() {
+          setTimeout(() => {
+            const ctx = document.getElementById('weeklySubmissionsChart');
+            if (ctx) {
+              // Destroy existing chart if it exists
+              if (window.weeklyChart) {
+                window.weeklyChart.destroy();
+              }
+              
+              window.weeklyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                  labels: ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'],
+                  datasets: [{
+                    label: 'Laporan yang Dikirim',
+                    data: this.dashboardStats.weeklySubmissions,
+                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    borderColor: 'rgb(59, 130, 246)',
+                    borderWidth: 1
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      ticks: {
+                        precision: 0
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          }, 100);
+        },
+        
+        // Initialize Database
+        initializeDatabase() {
+          google.script.run
+            .withSuccessHandler((result) => {
+              if (result.success) {
+                this.showNotification('success', result.message);
+              } else {
+                this.showNotification('error', result.error);
+              }
+            })
+            .withFailureHandler((error) => {
+              this.showNotification('error', "Kesalahan inisialisasi: " + error.toString());
+            })
+            .initializeApp();
+        },
+        
+        // Format Date - convert YYYY-MM-DD to DD/MM/YYYY
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          const date = new Date(dateStr);
+          return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        },
+        
+        // Notifications
+        showNotification(type, message) {
+          if (this.notification.timeout) {
+            clearTimeout(this.notification.timeout);
+          }
+          
+          this.notification.type = type;
+          this.notification.message = message;
+          this.notification.show = true;
+          
+          this.notification.timeout = setTimeout(() => {
+            this.notification.show = false;
+          }, 5000);
+        },
+      }
+    }
+  </script>
+</body>
+</html>
